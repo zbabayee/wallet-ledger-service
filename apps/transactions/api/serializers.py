@@ -4,7 +4,6 @@ from rest_framework import serializers
 
 from apps.transactions.models import Transaction
 from apps.wallets.models import Wallet
-from apps.wallets.services.serializers import WalletMinimalSerializer
 
 MIN_AMOUNT = Decimal("0.00000001")
 
@@ -93,6 +92,8 @@ class TransferSerializer(serializers.Serializer):
 
 
 class TransactionSerializer(serializers.ModelSerializer):
+    from apps.wallets.services.serializers import WalletMinimalSerializer
+
     from_wallet = WalletMinimalSerializer(read_only=True)
     to_wallet = WalletMinimalSerializer(read_only=True)
 

@@ -1,12 +1,9 @@
 from rest_framework import serializers
 
-from apps.wallets.api.serializers import CurrencyMiniSerializer
 from apps.wallets.models import Wallet
 
 
 class WalletMinimalSerializer(serializers.ModelSerializer):
-    currency = CurrencyMiniSerializer(read_only=True)
-
     class Meta:
         model = Wallet
         fields = [
@@ -14,6 +11,5 @@ class WalletMinimalSerializer(serializers.ModelSerializer):
             "label",
             "balance",
             "status",
-            "currency",
         ]
         read_only_fields = fields
