@@ -1,5 +1,7 @@
 from decimal import Decimal
 
+from asgiref.sync import async_to_sync
+from channels.layers import get_channel_layer
 from django.db import transaction as db_transaction
 from django.utils import timezone
 
@@ -12,14 +14,13 @@ from transactions.models import (
 )
 from wallets.models import Wallet, WalletStatus
 
-
 LARGE_TRANSFER_THRESHOLD = Decimal("10000")
 
 
 def _get_or_create_pending_transaction(
-    *,
-    idempotency_key: str,
-    defaults: dict,
+        *,
+        idempotency_key: str,
+        defaults: dict,
 ):
     """
     Returns:
@@ -56,12 +57,12 @@ def _fail(txn: Transaction, reason: str) -> None:
 
 
 def deposit(
-    *,
-    wallet_id: int,
-    amount: Decimal,
-    idempotency_key: str,
-    user,
-    description: str = "",
+        *,
+        wallet_id: int,
+        amount: Decimal,
+        idempotency_key: str,
+        user,
+        description: str = "",
 ):
     txn, created = _get_or_create_pending_transaction(
         idempotency_key=idempotency_key,
@@ -92,11 +93,11 @@ def deposit(
         wallet.save(update_fields=["balance", "updated_at"])
 
         TransactionLedger.objects.create(transaction=txn,
-            wallet=wallet,
-            direction=LedgerDirection.CREDIT,
-            amount=amount,
-            balance_after=wallet.balance,
-        )
+                                         wallet=wallet,
+                                         direction=LedgerDirection.CREDIT,
+                                         amount=amount,
+                                         balance_after=wallet.balance,
+                                         )
 
         _complete(txn)
 
@@ -104,12 +105,12 @@ def deposit(
 
 
 def withdraw(
-    *,
-    wallet_id: int,
-    amount: Decimal,
-    idempotency_key: str,
-    user,
-    description: str = "",
+        *,
+        wallet_id: int,
+        amount: Decimal,
+        idempotency_key: str,
+        user,
+        description: str = "",
 ):
     txn, created = _get_or_create_pending_transaction(
         idempotency_key=idempotency_key,
@@ -158,15 +159,14 @@ def withdraw(
 
 
 def transfer(
-    *,
-    from_wallet_id: int,
-    to_wallet_id: int,
-    amount: Decimal,
-    idempotency_key: str,
-    user,
-    description: str = "",
+        *,
+        from_wallet_id: int,
+        to_wallet_id: int,
+        amount: Decimal,
+        idempotency_key: str,
+        user,
+        description: str = "",
 ):
-
     if from_wallet_id == to_wallet_id:
         raise ValueError(
             "from_wallet_id and to_wallet_id must differ."
@@ -208,8 +208,8 @@ def transfer(
             return txn, False
 
         if (
-            source.status != WalletStatus.ACTIVE
-            or destination.status != WalletStatus.ACTIVE
+                source.status != WalletStatus.ACTIVE
+                or destination.status != WalletStatus.ACTIVE
         ):
             _fail(txn, "One of the wallets is not active.")
             return txn, False
@@ -225,19 +225,15 @@ def transfer(
         source.balance -= amount
         destination.balance += amount
 
-        source.save(
-            update_fields=[
+        source.save(update_fields=[
                 "balance",
                 "updated_at",
-            ]
-        )
+            ])
 
-        destination.save(
-            update_fields=[
+        destination.save(update_fields=[
                 "balance",
                 "updated_at",
-            ]
-        )
+            ])
 
         TransactionLedger.objects.create(
             transaction=txn,
@@ -259,7 +255,23 @@ def transfer(
 
     if amount >= LARGE_TRANSFER_THRESHOLD:
         from transactions.tasks import notify_monitoring_team
-
         notify_monitoring_team.delay(txn.id)
+
+        channel_layer = get_channel_layer()
+
+        async_to_sync(channel_layer.group_send)(
+            f"user_{destination.user_id}",
+            {
+                "type": "wallet_notification",
+                "data": {
+                    "transaction_id": str(txn.transaction_uuid),
+                    "amount": str(txn.amount),
+                    "currency": destination.currency.code,
+                    "sender_wallet": str(source.wallet_uuid),
+                    "recipient_wallet": str(destination.wallet_uuid),
+                    "message": f"You received {txn.amount} {destination.currency.code}",
+                },
+            },
+        )
 
     return txn, False
