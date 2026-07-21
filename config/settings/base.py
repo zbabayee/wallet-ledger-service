@@ -48,11 +48,13 @@ INSTALLED_APPS = [
     "drf_spectacular_sidecar",
     "corsheaders",
     "django_filters",
+    "channels",
 
     'apps.accounts',
     'apps.wallets',
     'apps.transactions',
     'apps.notifications',
+
 ]
 
 MIDDLEWARE = [
@@ -264,5 +266,13 @@ STORAGES = {
     },
     "staticfiles": {
         "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+    },
+}
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels_redis.core.RedisChannelLayer",
+        "CONFIG": {
+            "hosts": [(os.getenv("REDIS_HOST"), os.getenv("REDIS_PORT"))],
+        },
     },
 }
