@@ -17,6 +17,8 @@ class DepositAPIViewTests(APITestCase):
         self.user = User.objects.create_user(
             username="zahra",
             password="12345678",
+            email="zahra1@gmail.com",
+            mobile="09131111114",
         )
 
         self.client.force_authenticate(self.user)
@@ -34,7 +36,7 @@ class DepositAPIViewTests(APITestCase):
 
         self.url = reverse("deposit")
 
-    @patch("transactions.api.views.deposit")
+    @patch("apps.transactions.api.views.deposit")
     def test_successful_deposit(self, mock_deposit):
         txn = Transaction.objects.create(
             transaction_type=TransactionType.DEPOSIT,
@@ -44,9 +46,7 @@ class DepositAPIViewTests(APITestCase):
             idempotency_key=str(uuid4()),
             created_by=self.user,
         )
-
         mock_deposit.return_value = (txn, False)
-
         response = self.client.post(
             self.url,
             {
@@ -56,39 +56,10 @@ class DepositAPIViewTests(APITestCase):
             },
             format="json",
         )
-
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-
         mock_deposit.assert_called_once()
 
-    @patch("transactions.api.views.deposit")
-    def test_successful_deposit(self, mock_deposit):
-        txn = Transaction.objects.create(
-            transaction_type=TransactionType.DEPOSIT,
-            to_wallet=self.wallet,
-            amount=Decimal("50"),
-            status=TransactionStatus.COMPLETED,
-            idempotency_key=str(uuid4()),
-            created_by=self.user,
-        )
-
-        mock_deposit.return_value = (txn, False)
-
-        response = self.client.post(
-            self.url,
-            {
-                "wallet": self.wallet.id,
-                "amount": "50",
-                "idempotency_key": str(uuid4()),
-            },
-            format="json",
-        )
-
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-
-        mock_deposit.assert_called_once()
-
-    @patch("transactions.api.views.deposit")
+    @patch("apps.transactions.api.views.deposit")
     def test_idempotent_request_returns_200(self, mock_deposit):
         txn = Transaction.objects.create(
             transaction_type=TransactionType.DEPOSIT,
@@ -148,6 +119,8 @@ class WithdrawAPIViewTests(APITestCase):
         self.user = User.objects.create_user(
             username="zahra",
             password="12345678",
+            email="zahra@gmail.com",
+            mobile="09131111113",
         )
 
         self.client.force_authenticate(self.user)
@@ -165,7 +138,7 @@ class WithdrawAPIViewTests(APITestCase):
 
         self.url = reverse("withdraw")
 
-    @patch("transactions.api.views.withdraw")
+    @patch("apps.transactions.api.views.withdraw")
     def test_successful_withdraw(self, mock_withdraw):
         txn = Transaction.objects.create(
             transaction_type=TransactionType.WITHDRAW,
@@ -198,7 +171,7 @@ class WithdrawAPIViewTests(APITestCase):
             description="",
         )
 
-    @patch("transactions.api.views.withdraw")
+    @patch("apps.transactions.api.views.withdraw")
     def test_idempotent_request_returns_200(self, mock_withdraw):
         txn = Transaction.objects.create(
             transaction_type=TransactionType.WITHDRAW,
@@ -258,11 +231,15 @@ class TransactionListAPIViewTests(APITestCase):
         self.user1 = User.objects.create_user(
             username="user1",
             password="password123",
+            email="user1@gmail.com",
+            mobile="09131111111",
         )
 
         self.user2 = User.objects.create_user(
             username="user2",
             password="password123",
+            email="user2@gmail.com",
+            mobile="09131111112",
         )
         self.currency = Currency.objects.create(code="USD", name="US Dollar")
 
@@ -278,7 +255,7 @@ class TransactionListAPIViewTests(APITestCase):
             currency=self.currency,
         )
 
-        self.url = reverse("transaction-list")
+        self.url = reverse("transaction-history")
 
     def authenticate(self, user):
         self.client.force_authenticate(user=user)
@@ -298,6 +275,8 @@ class TransactionListAPIViewTests(APITestCase):
             amount=Decimal(amount),
             status=TransactionStatus.COMPLETED,
             created_by=user,
+            idempotency_key=str(uuid4()),
+            reference_number=str(uuid4()),
         )
 
     def test_authenticated_user_can_get_transactions(self):
@@ -311,33 +290,40 @@ class TransactionListAPIViewTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         results = response.data["results"] if "results" in response.data else response.data
         transaction_ids = [
-            item["id"]
+            str(item["id"])
             for item in results
         ]
-        self.assertIn(transaction.id, transaction_ids)
+        self.assertIn(str(transaction.id), transaction_ids)
 
-    def test_user_can_only_see_own_transactions(self):
+    def test_user_can_see_transactions_related_to_his_wallets(self):
         self.authenticate(self.user1)
+
         own_transaction = self.create_transaction(
             from_wallet=self.wallet1,
             to_wallet=self.wallet2,
             user=self.user1,
         )
-        other_transaction = self.create_transaction(
+        received_transaction = self.create_transaction(
             from_wallet=self.wallet2,
             to_wallet=self.wallet1,
             user=self.user2,
         )
-
         response = self.client.get(self.url)
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        results = response.data["results"] if "results" in response.data else response.data
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_200_OK,
+        )
+        results = (
+            response.data["results"]
+            if "results" in response.data
+            else response.data
+        )
         transaction_ids = [
-            item["id"]
+            str(item["id"])
             for item in results
         ]
-        self.assertIn(own_transaction.id, transaction_ids)
-        self.assertNotIn(other_transaction.id, transaction_ids)
+        self.assertIn(str(own_transaction.id), transaction_ids)
+        self.assertIn(str(received_transaction.id),transaction_ids)
 
     def test_transaction_list_requires_authentication(self):
         response = self.client.get(self.url)
@@ -374,9 +360,9 @@ class TransactionListAPIViewTests(APITestCase):
         results = response.data["results"] if "results" in response.data else response.data
 
         ids = [
-            item["id"]
+            str(item["id"])
             for item in results
         ]
 
-        self.assertEqual(ids[0], second.id)
-        self.assertEqual(ids[1], first.id)
+        self.assertEqual(ids[0], str(second.id))
+        self.assertEqual(ids[1], str(first.id))
