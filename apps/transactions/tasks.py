@@ -14,7 +14,7 @@ def notify_monitoring_team(transaction_id: int) -> None:
     environment this could send an email, Slack notification, webhook,
     or trigger an alerting system.
     """
-    from transactions.models import Transaction
+    from apps.transactions.models import Transaction
 
     try:
         txn = (

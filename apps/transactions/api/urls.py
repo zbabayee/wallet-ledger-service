@@ -1,7 +1,7 @@
 # transactions/api/urls.py
 from django.urls import path
 
-from transactions.api.views import (
+from .views import (
     DepositView,
     WithdrawView,
     TransferView,

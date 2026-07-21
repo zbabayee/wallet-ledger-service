@@ -8,14 +8,14 @@ from rest_framework import generics, permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from transactions.api.serializers import (
+from .serializers import (
     DepositSerializer,
     TransactionSerializer,
     TransferSerializer,
     WithdrawSerializer,
 )
-from transactions.models import Transaction, TransactionStatus
-from transactions.services.transaction_service import (
+from apps.transactions.models import Transaction, TransactionStatus
+from apps.transactions.services.transaction_service import (
     deposit,
     transfer,
     withdraw,

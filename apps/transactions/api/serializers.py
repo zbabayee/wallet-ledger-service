@@ -2,10 +2,9 @@ from decimal import Decimal
 
 from rest_framework import serializers
 
-from transactions.models import Transaction
-from wallets.models import Wallet
-from wallets.services.serializers import WalletMinimalSerializer
-
+from apps.transactions.models import Transaction
+from apps.wallets.models import Wallet
+from apps.wallets.services.serializers import WalletMinimalSerializer
 
 MIN_AMOUNT = Decimal("0.00000001")
 
@@ -83,8 +82,8 @@ class TransferSerializer(serializers.Serializer):
             )
 
         if (
-            attrs["from_wallet"].currency_id
-            != attrs["to_wallet"].currency_id
+                attrs["from_wallet"].currency_id
+                != attrs["to_wallet"].currency_id
         ):
             raise serializers.ValidationError(
                 "Both wallets must use the same currency."
