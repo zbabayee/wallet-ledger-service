@@ -1,5 +1,5 @@
 from decimal import Decimal
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
@@ -17,6 +17,8 @@ from apps.wallets.models import Wallet, WalletStatus
 
 LARGE_TRANSFER_THRESHOLD = Decimal("10000")
 
+def _generate_reference_number():
+    return f"TXN-{uuid4().hex[:12].upper()}"
 
 def _get_or_create_pending_transaction(
         *,
@@ -74,6 +76,7 @@ def deposit(
             "amount": amount,
             "description": description,
             "created_by": user,
+            "reference_number": _generate_reference_number()
         },
     )
 
@@ -121,6 +124,7 @@ def withdraw(
             "amount": amount,
             "description": description,
             "created_by": user,
+            "reference_number": _generate_reference_number()
         },
     )
 
@@ -182,6 +186,7 @@ def transfer(
             "amount": amount,
             "description": description,
             "created_by": user,
+            "reference_number": _generate_reference_number()
         },
     )
 
@@ -261,35 +266,26 @@ def transfer(
             amount=amount,
             balance_after=destination.balance,
         )
-
         def after_commit():
-            # Large transfer monitoring
             if amount >= LARGE_TRANSFER_THRESHOLD:
                 from apps.transactions.tasks import notify_monitoring_team
-
                 notify_monitoring_team.delay(txn.id)
 
-            # Real-time notification
             channel_layer = get_channel_layer()
-
             async_to_sync(channel_layer.group_send)(
                 f"user_{destination.user_id}",
                 {
                     "type": "wallet_notification",
                     "data": {
-                        "transaction_id": str(txn.transaction_uuid),
+                        "idempotency_key": str(txn.idempotency_key),
                         "amount": str(txn.amount),
                         "currency": destination.currency.code,
-                        "sender_wallet": str(source.wallet_uuid),
-                        "recipient_wallet": str(destination.wallet_uuid),
-                        "message": (
-                            f"You received {txn.amount} "
-                            f"{destination.currency.code}"
-                        ),
+                        "sender_wallet": str(source.id),  # اصلاح‌شده
+                        "recipient_wallet": str(destination.id),  # اصلاح‌شده
+                        "message": f"You received {txn.amount} {destination.currency.code}",
                     },
                 },
             )
 
         db_transaction.on_commit(after_commit)
-
-    return txn, False
+        return txn, False

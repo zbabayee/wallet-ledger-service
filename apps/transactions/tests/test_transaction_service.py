@@ -4,9 +4,11 @@ from uuid import uuid4
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
+from django.test import TransactionTestCase
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
+
 from apps.transactions.models import (
     LedgerDirection,
     Transaction,
@@ -53,14 +55,14 @@ class DepositServiceTests(TestCase):
 
         self.wallet.refresh_from_db()
         self.assertFalse(replayed)
-        self.assertEqual(self.wallet.balance,Decimal("150.00"),)
+        self.assertEqual(self.wallet.balance, Decimal("150.00"), )
         self.assertEqual(txn.status, TransactionStatus.COMPLETED)
-        self.assertEqual(txn.transaction_type,TransactionType.DEPOSIT)
+        self.assertEqual(txn.transaction_type, TransactionType.DEPOSIT)
         self.assertEqual(TransactionLedger.objects.count(), 1)
 
         ledger = TransactionLedger.objects.first()
-        self.assertEqual(ledger.direction, LedgerDirection.CREDIT,)
-        self.assertEqual(ledger.balance_after, Decimal("150.00"),)
+        self.assertEqual(ledger.direction, LedgerDirection.CREDIT, )
+        self.assertEqual(ledger.balance_after, Decimal("150.00"), )
 
     def test_deposit_to_inactive_wallet(self):
         self.wallet.status = WalletStatus.FROZEN
@@ -75,8 +77,8 @@ class DepositServiceTests(TestCase):
 
         self.wallet.refresh_from_db()
         self.assertFalse(replayed)
-        self.assertEqual(txn.status,TransactionStatus.FAILED)
-        self.assertEqual(txn.failure_reason,"Wallet is not active.")
+        self.assertEqual(txn.status, TransactionStatus.FAILED)
+        self.assertEqual(txn.failure_reason, "Wallet is not active.")
         self.assertEqual(self.wallet.balance, Decimal("100.00"))
         self.assertEqual(TransactionLedger.objects.count(), 0)
 
@@ -100,10 +102,10 @@ class DepositServiceTests(TestCase):
         self.wallet.refresh_from_db()
         self.assertFalse(replayed1)
         self.assertTrue(replayed2)
-        self.assertEqual(txn1.id,txn2.id)
-        self.assertEqual(self.wallet.balance,Decimal("125.00"))
-        self.assertEqual(Transaction.objects.count(),1)
-        self.assertEqual( TransactionLedger.objects.count(),1)
+        self.assertEqual(txn1.id, txn2.id)
+        self.assertEqual(self.wallet.balance, Decimal("125.00"))
+        self.assertEqual(Transaction.objects.count(), 1)
+        self.assertEqual(TransactionLedger.objects.count(), 1)
 
 
 class WithdrawServiceTests(TestCase):
@@ -139,10 +141,10 @@ class WithdrawServiceTests(TestCase):
 
         self.wallet.refresh_from_db()
         self.assertFalse(replayed)
-        self.assertEqual(self.wallet.balance,Decimal("60.00"))
-        self.assertEqual(txn.status,TransactionStatus.COMPLETED)
+        self.assertEqual(self.wallet.balance, Decimal("60.00"))
+        self.assertEqual(txn.status, TransactionStatus.COMPLETED)
         self.assertEqual(txn.transaction_type, TransactionType.WITHDRAW)
-        self.assertEqual(TransactionLedger.objects.count(),1)
+        self.assertEqual(TransactionLedger.objects.count(), 1)
         ledger = TransactionLedger.objects.first()
         self.assertEqual(ledger.direction, LedgerDirection.DEBIT)
         self.assertEqual(ledger.balance_after, Decimal("60.00"))
@@ -174,10 +176,10 @@ class WithdrawServiceTests(TestCase):
 
         self.wallet.refresh_from_db()
         self.assertFalse(replayed)
-        self.assertEqual(txn.status,TransactionStatus.FAILED)
-        self.assertEqual(txn.failure_reason,"Wallet is not active.")
-        self.assertEqual(self.wallet.balance,Decimal("100.00"))
-        self.assertEqual(TransactionLedger.objects.count(),0)
+        self.assertEqual(txn.status, TransactionStatus.FAILED)
+        self.assertEqual(txn.failure_reason, "Wallet is not active.")
+        self.assertEqual(self.wallet.balance, Decimal("100.00"))
+        self.assertEqual(TransactionLedger.objects.count(), 0)
 
     def test_withdraw_is_idempotent(self):
         key = str(uuid4())
@@ -199,13 +201,13 @@ class WithdrawServiceTests(TestCase):
         self.wallet.refresh_from_db()
         self.assertFalse(replayed1)
         self.assertTrue(replayed2)
-        self.assertEqual(txn1.id,txn2.id,)
+        self.assertEqual(txn1.id, txn2.id, )
         self.assertEqual(self.wallet.balance, Decimal("75.00"))
-        self.assertEqual(Transaction.objects.count(),1,)
-        self.assertEqual(TransactionLedger.objects.count(),1)
+        self.assertEqual(Transaction.objects.count(), 1, )
+        self.assertEqual(TransactionLedger.objects.count(), 1)
 
 
-class TransferServiceTests(TestCase):
+class TransferServiceTests(TransactionTestCase):
 
     def setUp(self):
         self.user1 = User.objects.create_user(
@@ -288,10 +290,10 @@ class TransferServiceTests(TestCase):
         self.wallet2.refresh_from_db()
         self.assertFalse(replayed)
         self.assertEqual(txn.status, TransactionStatus.FAILED)
-        self.assertEqual(txn.failure_reason,"Insufficient balance.")
-        self.assertEqual(self.wallet1.balance,Decimal("1000.00"))
+        self.assertEqual(txn.failure_reason, "Insufficient balance.")
+        self.assertEqual(self.wallet1.balance, Decimal("1000.00"))
         self.assertEqual(self.wallet2.balance, Decimal("500.00"))
-        self.assertEqual(TransactionLedger.objects.count(),0)
+        self.assertEqual(TransactionLedger.objects.count(), 0)
 
     def test_transfer_inactive_wallet(self):
         self.wallet2.status = WalletStatus.FROZEN
@@ -307,7 +309,7 @@ class TransferServiceTests(TestCase):
 
         self.assertFalse(replayed)
         self.assertEqual(txn.status, TransactionStatus.FAILED)
-        self.assertEqual(txn.failure_reason,"One of the wallets is not active.")
+        self.assertEqual(txn.failure_reason, "One of the wallets is not active.")
 
     def test_transfer_same_wallet(self):
         with self.assertRaises(ValueError):
@@ -343,29 +345,25 @@ class TransferServiceTests(TestCase):
         self.assertFalse(replayed1)
         self.assertTrue(replayed2)
         self.assertEqual(txn1.id, txn2.id)
-        self.assertEqual(self.wallet1.balance,Decimal("950.00"))
+        self.assertEqual(self.wallet1.balance, Decimal("950.00"))
         self.assertEqual(self.wallet2.balance, Decimal("550.00"))
-        self.assertEqual(Transaction.objects.count(),1)
-        self.assertEqual(TransactionLedger.objects.count(),2)
+        self.assertEqual(Transaction.objects.count(), 1)
+        self.assertEqual(TransactionLedger.objects.count(), 2)
 
     @patch("apps.transactions.services.transaction_service.async_to_sync")
     @patch("apps.transactions.services.transaction_service.get_channel_layer")
     @patch("apps.transactions.tasks.notify_monitoring_team.delay")
     def test_large_transfer_triggers_celery_and_websocket(
-        self,
-        mock_notify,
-        mock_get_channel_layer,
-        mock_async_to_sync,
+            self,
+            mock_notify,
+            mock_get_channel_layer,
+            mock_async_to_sync,
     ):
-        """
-        Large transfers should:
-        - enqueue Celery task
-        - send websocket notification
-        """
         channel_layer = MagicMock()
         mock_get_channel_layer.return_value = channel_layer
         websocket_sender = MagicMock()
         mock_async_to_sync.return_value = websocket_sender
+
         txn, replayed = transfer(
             from_wallet_id=self.wallet1.id,
             to_wallet_id=self.wallet2.id,
@@ -376,64 +374,50 @@ class TransferServiceTests(TestCase):
 
         self.assertFalse(replayed)
         mock_notify.assert_called_once_with(txn.id)
-        mock_async_to_sync.assert_called_once_with(
-            channel_layer.group_send
-        )
+        mock_async_to_sync.assert_called_once_with(channel_layer.group_send)
         websocket_sender.assert_called_once()
         group_name, payload = websocket_sender.call_args[0]
 
-        self.assertEqual(group_name,f"user_{self.wallet2.user_id}")
-        self.assertEqual(payload["type"],"wallet_notification")
-        self.assertEqual(payload["data"]["transaction_id"],str(txn.transaction_uuid))
-        self.assertEqual(payload["data"]["amount"],"15000.00")
+        self.assertEqual(group_name, f"user_{self.wallet2.user_id}")
+        self.assertEqual(payload["type"], "wallet_notification")
+        self.assertEqual(payload["data"]["transaction_id"], str(txn.idempotency_key))
+        self.assertEqual(payload["data"]["amount"], "15000.00")
 
     @patch("apps.transactions.services.transaction_service.async_to_sync")
     @patch("apps.transactions.services.transaction_service.get_channel_layer")
     @patch("apps.transactions.tasks.notify_monitoring_team.delay")
     def test_small_transfer_only_sends_websocket(
-        self,
-        mock_notify,
-        mock_get_channel_layer,
-        mock_async_to_sync,
+            self,
+            mock_notify,
+            mock_get_channel_layer,
+            mock_async_to_sync,
     ):
-        """
-        Small transfers should not enqueue Celery
-        but MUST send websocket notification.
-        """
-
         channel_layer = MagicMock()
         mock_get_channel_layer.return_value = channel_layer
         websocket_sender = MagicMock()
         mock_async_to_sync.return_value = websocket_sender
 
-        transfer(
-            from_wallet_id=self.wallet1.id,
-            to_wallet_id=self.wallet2.id,
-            amount=Decimal("100.00"),
-            idempotency_key=str(uuid4()),
-            user=self.user1,
-        )
+        with self.captureOnCommitCallbacks(execute=True):  # <-- اضافه شد
+            transfer(
+                from_wallet_id=self.wallet1.id,
+                to_wallet_id=self.wallet2.id,
+                amount=Decimal("100.00"),
+                idempotency_key=str(uuid4()),
+                user=self.user1,
+            )
+
         mock_notify.assert_not_called()
-        mock_async_to_sync.assert_called_once_with(
-            channel_layer.group_send
-        )
+        mock_async_to_sync.assert_called_once_with(channel_layer.group_send)
         websocket_sender.assert_called_once()
 
     @patch("apps.transactions.services.transaction_service.async_to_sync")
     @patch("apps.transactions.services.transaction_service.get_channel_layer")
-    def test_websocket_payload(
-        self,
-        mock_get_channel_layer,
-        mock_async_to_sync,
-    ):
-        """
-        Verify websocket payload fields.
-        """
-
+    def test_websocket_payload(self, mock_get_channel_layer, mock_async_to_sync):
         channel_layer = MagicMock()
         mock_get_channel_layer.return_value = channel_layer
         websocket_sender = MagicMock()
         mock_async_to_sync.return_value = websocket_sender
+
         txn, _ = transfer(
             from_wallet_id=self.wallet1.id,
             to_wallet_id=self.wallet2.id,
@@ -443,21 +427,21 @@ class TransferServiceTests(TestCase):
         )
 
         _, payload = websocket_sender.call_args[0]
-        self.assertEqual(payload["type"],"wallet_notification")
+        self.assertEqual(payload["type"], "wallet_notification")
         data = payload["data"]
-        self.assertEqual(data["transaction_id"], str(txn.transaction_uuid))
+        self.assertEqual(data["idempotency_key"], str(txn.idempotency_key))
         self.assertEqual(data["amount"], "250.00")
-        self.assertEqual(data["currency"],"USD")
-        self.assertEqual(data["sender_wallet"], str(self.wallet1.wallet_uuid))
-        self.assertEqual(data["recipient_wallet"],str(self.wallet2.wallet_uuid))
-        self.assertIn("250.00",data["message"])
+        self.assertEqual(data["currency"], "USD")
+        self.assertEqual(data["sender_wallet"], str(self.wallet1.id))  # نه wallet_uuid
+        self.assertEqual(data["recipient_wallet"], str(self.wallet2.id))  # نه wallet_uuid
+        self.assertIn("250.00", data["message"])
 
     @patch("apps.transactions.tasks.notify_monitoring_team.delay")
     @patch("apps.transactions.services.transaction_service.async_to_sync")
     def test_failed_transfer_sends_no_notification(
-        self,
-        mock_async_to_sync,
-        mock_notify,
+            self,
+            mock_async_to_sync,
+            mock_notify,
     ):
         """
         Failed transfers must not trigger
@@ -472,6 +456,7 @@ class TransferServiceTests(TestCase):
         )
         mock_notify.assert_not_called()
         mock_async_to_sync.assert_not_called()
+
 
 class TransferAPIViewTests(APITestCase):
 
@@ -511,10 +496,8 @@ class TransferAPIViewTests(APITestCase):
 
         self.url = reverse("transfer")
 
-
     @patch("apps.transactions.api.views.transfer")
     def test_successful_transfer(self, mock_transfer):
-
         txn = Transaction.objects.create(
             transaction_type=TransactionType.TRANSFER,
             from_wallet=self.source_wallet,
@@ -542,12 +525,10 @@ class TransferAPIViewTests(APITestCase):
             format="json",
         )
 
-
         self.assertEqual(
             response.status_code,
             status.HTTP_201_CREATED,
         )
-
 
         mock_transfer.assert_called_once_with(
             from_wallet_id=self.source_wallet.id,
@@ -558,13 +539,11 @@ class TransferAPIViewTests(APITestCase):
             description="test transfer",
         )
 
-
     @patch("apps.transactions.api.views.transfer")
     def test_idempotent_transfer_returns_200(
-        self,
-        mock_transfer,
+            self,
+            mock_transfer,
     ):
-
         txn = Transaction.objects.create(
             transaction_type=TransactionType.TRANSFER,
             from_wallet=self.source_wallet,
@@ -581,7 +560,6 @@ class TransferAPIViewTests(APITestCase):
             True,
         )
 
-
         response = self.client.post(
             self.url,
             {
@@ -593,15 +571,12 @@ class TransferAPIViewTests(APITestCase):
             format="json",
         )
 
-
         self.assertEqual(
             response.status_code,
             status.HTTP_200_OK,
         )
 
-
     def test_same_wallet_transfer_validation(self):
-
         response = self.client.post(
             self.url,
             {
@@ -613,15 +588,12 @@ class TransferAPIViewTests(APITestCase):
             format="json",
         )
 
-
         self.assertEqual(
             response.status_code,
             status.HTTP_400_BAD_REQUEST,
         )
 
-
     def test_invalid_amount(self):
-
         response = self.client.post(
             self.url,
             {
@@ -633,19 +605,15 @@ class TransferAPIViewTests(APITestCase):
             format="json",
         )
 
-
         self.assertEqual(
             response.status_code,
             status.HTTP_400_BAD_REQUEST,
         )
 
-
     def test_requires_authentication(self):
-
         self.client.force_authenticate(
             user=None
         )
-
 
         response = self.client.post(
             self.url,
@@ -658,15 +626,12 @@ class TransferAPIViewTests(APITestCase):
             format="json",
         )
 
-
         self.assertEqual(
             response.status_code,
             status.HTTP_401_UNAUTHORIZED,
         )
 
-
     def test_currency_mismatch_validation(self):
-
         eur_currency = Currency.objects.create(
             code="EUR",
             name="Euro",
@@ -678,7 +643,6 @@ class TransferAPIViewTests(APITestCase):
             balance=Decimal("500"),
         )
 
-
         response = self.client.post(
             self.url,
             {
@@ -689,7 +653,6 @@ class TransferAPIViewTests(APITestCase):
             },
             format="json",
         )
-
 
         self.assertEqual(
             response.status_code,

@@ -21,8 +21,8 @@ class TestWalletNotificationConsumer:
         Receiver should get websocket notification
         after successful transfer.
         """
-        sender = await self.create_user(username="sender")
-        receiver = await self.create_user(username="receiver")
+        sender = await self.create_user(username="sender", email="sender@gmail.com", mobile="09130650455")
+        receiver = await self.create_user(username="receiver", email="receiver@gmail.com", mobile="09130650459")
         currency = await self.create_currency(code="USD")
 
         sender_wallet = await self.create_wallet(
@@ -69,21 +69,19 @@ class TestWalletNotificationConsumer:
         )
 
     @staticmethod
-    async def get_access_token(user):
-        token = RefreshToken.for_user(user)
-        return str(
-            token.access_token
-        )
+    async def get_access_token(self, user):
+        token = await sync_to_async(RefreshToken.for_user)(user)
+        return str(token.access_token)
 
     @staticmethod
-    async def create_user(username):
+    async def create_user(username, email, mobile):
         return await sync_to_async(
             User.objects.create_user
         )(
             username=username,
             password="password123",
-            mobile="09130650476",
-            email="zahra@gmail.com",
+            mobile=mobile,
+            email=email,
         )
 
     @staticmethod
