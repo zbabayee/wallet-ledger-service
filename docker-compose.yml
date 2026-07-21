@@ -64,7 +64,9 @@ services:
     command:
       - gunicorn
       - config.asgi:application
-      - --config
+      - -k
+      - uvicorn.workers.UvicornWorker
+      - -c
       - config/gunicorn.conf.py
     env_file:
       - .env

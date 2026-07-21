@@ -34,7 +34,8 @@ RUN addgroup --system django \
 
 
 RUN chown -R django:django /app
-
+RUN mkdir -p /app/config/staticfiles \
+    && chown -R django:django /app/config/staticfiles
 
 USER django
 
