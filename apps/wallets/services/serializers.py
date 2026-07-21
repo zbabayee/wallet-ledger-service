@@ -14,5 +14,6 @@ class WalletMinimalSerializer(serializers.ModelSerializer):
             "label",
             "balance",
             "status",
+            "currency",
         ]
         read_only_fields = fields
