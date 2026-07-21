@@ -64,7 +64,7 @@ services:
     command:
       - gunicorn
       - config.asgi:application
-      - -c
+      - --config
       - config/gunicorn.conf.py
     env_file:
       - .env
@@ -84,7 +84,7 @@ services:
           "CMD",
           "curl",
           "-f",
-          "http://localhost:8000/"
+          "http://localhost:8000/health/"
         ]
       interval: 30s
       timeout: 10s
