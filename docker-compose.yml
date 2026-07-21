@@ -1,0 +1,169 @@
+services:
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: wallet_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${DB_USER} -d ${DB_NAME}"
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - wallet_network
+
+
+  redis:
+    image: redis:7-alpine
+    container_name: wallet_redis
+    restart: unless-stopped
+    command:
+      redis-server --appendonly yes
+
+    volumes:
+      - redis_data:/data
+
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "redis-cli",
+          "ping"
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - wallet_network
+
+
+  migrate:
+    build: .
+    container_name: wallet_migrate
+    command:
+      python manage.py migrate
+    env_file:
+      - .env
+    depends_on:
+      postgres:
+        condition:
+          service_healthy
+    networks:
+      - wallet_network
+
+
+  web:
+    build: .
+    container_name: wallet_web
+    restart: unless-stopped
+    command:
+      gunicorn
+      config.asgi:application
+      -c
+      config/gunicorn.conf.py
+
+    env_file:
+      - .env
+
+    ports:
+      - "8000:8000"
+
+    depends_on:
+      migrate:
+        condition:
+          service_completed_successfully
+
+      redis:
+        condition:
+          service_healthy
+
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "curl",
+          "-f",
+          "http://localhost:8000/"
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+    networks:
+      - wallet_network
+
+
+
+  celery_worker:
+    build: .
+    container_name: wallet_celery_worker
+    restart: unless-stopped
+
+    command:
+      celery
+      -A
+      config
+      worker
+      -l
+      INFO
+
+    env_file:
+      - .env
+
+    depends_on:
+      redis:
+        condition:
+          service_healthy
+      postgres:
+        condition:
+          service_healthy
+    networks:
+      - wallet_network
+
+
+
+  celery_beat:
+    build: .
+    container_name: wallet_celery_beat
+    restart: unless-stopped
+    command:
+      celery
+      -A
+      config
+      beat
+      -l
+      INFO
+
+    env_file:
+      - .env
+
+
+    depends_on:
+      redis:
+        condition:
+          service_healthy
+
+    networks:
+      - wallet_network
+
+
+
+
+volumes:
+  postgres_data:
+  redis_data:
+
+
+networks:
+  wallet_network:
+    driver: bridge
