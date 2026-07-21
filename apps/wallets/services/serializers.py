@@ -1,7 +1,7 @@
 from rest_framework import serializers
 
-from wallets.api.serializers import CurrencyMiniSerializer
-from wallets.models import Wallet
+from apps.wallets.api.serializers import CurrencyMiniSerializer
+from apps.wallets.models import Wallet
 
 
 class WalletMinimalSerializer(serializers.ModelSerializer):
