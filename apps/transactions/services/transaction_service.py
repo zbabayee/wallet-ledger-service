@@ -1,4 +1,5 @@
 from decimal import Decimal
+from uuid import UUID
 
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
@@ -64,6 +65,7 @@ def deposit(
         user,
         description: str = "",
 ):
+
     txn, created = _get_or_create_pending_transaction(
         idempotency_key=idempotency_key,
         defaults={
@@ -92,14 +94,13 @@ def deposit(
         wallet.balance += amount
         wallet.save(update_fields=["balance", "updated_at"])
 
+        _complete(txn)
         TransactionLedger.objects.create(transaction=txn,
                                          wallet=wallet,
                                          direction=LedgerDirection.CREDIT,
                                          amount=amount,
                                          balance_after=wallet.balance,
                                          )
-
-        _complete(txn)
 
     return txn, False
 
@@ -144,6 +145,7 @@ def withdraw(
 
         wallet.balance -= amount
         wallet.save(update_fields=["balance", "updated_at"])
+        _complete(txn)
 
         TransactionLedger.objects.create(
             transaction=txn,
@@ -153,15 +155,14 @@ def withdraw(
             balance_after=wallet.balance,
         )
 
-        _complete(txn)
 
     return txn, False
 
 
 def transfer(
     *,
-    from_wallet_id: int,
-    to_wallet_id: int,
+    from_wallet_id: UUID,
+    to_wallet_id: UUID,
     amount: Decimal,
     idempotency_key: str,
     user,
@@ -189,15 +190,20 @@ def transfer(
 
     with db_transaction.atomic():
 
-        first_id, second_id = sorted([from_wallet_id, to_wallet_id])
+        wallet_ids = [
+            from_wallet_id,
+            to_wallet_id,
+        ]
+
+        wallets = (
+            Wallet.objects
+            .select_for_update()
+            .filter(pk__in=wallet_ids)
+        )
 
         wallets = {
             wallet.pk: wallet
-            for wallet in (
-                Wallet.objects
-                .select_for_update()
-                .filter(pk__in=[first_id, second_id])
-            )
+            for wallet in wallets
         }
 
         source = wallets.get(from_wallet_id)
@@ -239,6 +245,7 @@ def transfer(
             ]
         )
 
+        _complete(txn)
         TransactionLedger.objects.create(
             transaction=txn,
             wallet=source,
@@ -254,8 +261,6 @@ def transfer(
             amount=amount,
             balance_after=destination.balance,
         )
-
-        _complete(txn)
 
         def after_commit():
             # Large transfer monitoring

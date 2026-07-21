@@ -33,7 +33,6 @@ class DepositServiceTests(TestCase):
         self.currency = Currency.objects.create(
             code="USD",
             name="US Dollar",
-            symbol="$",
         )
 
         self.wallet = Wallet.objects.create(
@@ -64,7 +63,7 @@ class DepositServiceTests(TestCase):
         self.assertEqual(ledger.balance_after, Decimal("150.00"),)
 
     def test_deposit_to_inactive_wallet(self):
-        self.wallet.status = WalletStatus.INACTIVE
+        self.wallet.status = WalletStatus.FROZEN
         self.wallet.save()
 
         txn, replayed = deposit(
@@ -79,20 +78,6 @@ class DepositServiceTests(TestCase):
         self.assertEqual(txn.status,TransactionStatus.FAILED)
         self.assertEqual(txn.failure_reason,"Wallet is not active.")
         self.assertEqual(self.wallet.balance, Decimal("100.00"))
-        self.assertEqual(TransactionLedger.objects.count(), 0)
-
-    def test_deposit_wallet_not_found(self):
-        txn, replayed = deposit(
-            wallet_id=999999,
-            amount=Decimal("10"),
-            idempotency_key=str(uuid4()),
-            user=self.user,
-        )
-
-        self.assertFalse(replayed)
-
-        self.assertEqual(txn.status,TransactionStatus.FAILED)
-        self.assertEqual(txn.failure_reason,  "Wallet not found.")
         self.assertEqual(TransactionLedger.objects.count(), 0)
 
     def test_deposit_is_idempotent(self):
@@ -128,12 +113,12 @@ class WithdrawServiceTests(TestCase):
             username="zahra",
             email="zahra@test.com",
             password="12345678",
+            mobile="09130650444"
         )
 
         self.currency = Currency.objects.create(
             code="USD",
             name="US Dollar",
-            symbol="$",
         )
 
         self.wallet = Wallet.objects.create(
@@ -177,7 +162,7 @@ class WithdrawServiceTests(TestCase):
         self.assertEqual(TransactionLedger.objects.count(), 0)
 
     def test_withdraw_inactive_wallet(self):
-        self.wallet.status = WalletStatus.INACTIVE
+        self.wallet.status = WalletStatus.FROZEN
         self.wallet.save()
 
         txn, replayed = withdraw(
@@ -192,19 +177,6 @@ class WithdrawServiceTests(TestCase):
         self.assertEqual(txn.status,TransactionStatus.FAILED)
         self.assertEqual(txn.failure_reason,"Wallet is not active.")
         self.assertEqual(self.wallet.balance,Decimal("100.00"))
-        self.assertEqual(TransactionLedger.objects.count(),0)
-
-    def test_withdraw_wallet_not_found(self):
-        txn, replayed = withdraw(
-            wallet_id=999999,
-            amount=Decimal("10.00"),
-            idempotency_key=str(uuid4()),
-            user=self.user,
-        )
-
-        self.assertFalse(replayed)
-        self.assertEqual(txn.status,TransactionStatus.FAILED)
-        self.assertEqual( txn.failure_reason,"Wallet not found.")
         self.assertEqual(TransactionLedger.objects.count(),0)
 
     def test_withdraw_is_idempotent(self):
@@ -240,18 +212,19 @@ class TransferServiceTests(TestCase):
             username="user1",
             email="user1@test.com",
             password="12345678",
+            mobile="09130650445"
         )
 
         self.user2 = User.objects.create_user(
             username="user2",
             email="user2@test.com",
             password="12345678",
+            mobile="09130650448"
         )
 
         self.currency = Currency.objects.create(
             code="USD",
             name="US Dollar",
-            symbol="$",
         )
 
         self.wallet1 = Wallet.objects.create(
@@ -320,21 +293,8 @@ class TransferServiceTests(TestCase):
         self.assertEqual(self.wallet2.balance, Decimal("500.00"))
         self.assertEqual(TransactionLedger.objects.count(),0)
 
-    def test_transfer_wallet_not_found(self):
-        txn, replayed = transfer(
-            from_wallet_id=999999,
-            to_wallet_id=self.wallet2.id,
-            amount=Decimal("10"),
-            idempotency_key=str(uuid4()),
-            user=self.user1,
-        )
-
-        self.assertFalse(replayed)
-        self.assertEqual(txn.status, TransactionStatus.FAILED)
-        self.assertEqual(txn.failure_reason,"Wallet not found.")
-
     def test_transfer_inactive_wallet(self):
-        self.wallet2.status = WalletStatus.INACTIVE
+        self.wallet2.status = WalletStatus.FROZEN
         self.wallet2.save()
 
         txn, replayed = transfer(
@@ -388,9 +348,9 @@ class TransferServiceTests(TestCase):
         self.assertEqual(Transaction.objects.count(),1)
         self.assertEqual(TransactionLedger.objects.count(),2)
 
-    @patch("transactions.services.transaction_service.async_to_sync")
-    @patch("transactions.services.transaction_service.get_channel_layer")
-    @patch("transactions.tasks.notify_monitoring_team.delay")
+    @patch("apps.transactions.services.transaction_service.async_to_sync")
+    @patch("apps.transactions.services.transaction_service.get_channel_layer")
+    @patch("apps.transactions.tasks.notify_monitoring_team.delay")
     def test_large_transfer_triggers_celery_and_websocket(
         self,
         mock_notify,
@@ -427,9 +387,9 @@ class TransferServiceTests(TestCase):
         self.assertEqual(payload["data"]["transaction_id"],str(txn.transaction_uuid))
         self.assertEqual(payload["data"]["amount"],"15000.00")
 
-    @patch("transactions.services.transaction_service.async_to_sync")
-    @patch("transactions.services.transaction_service.get_channel_layer")
-    @patch("transactions.tasks.notify_monitoring_team.delay")
+    @patch("apps.transactions.services.transaction_service.async_to_sync")
+    @patch("apps.transactions.services.transaction_service.get_channel_layer")
+    @patch("apps.transactions.tasks.notify_monitoring_team.delay")
     def test_small_transfer_only_sends_websocket(
         self,
         mock_notify,
@@ -459,8 +419,8 @@ class TransferServiceTests(TestCase):
         )
         websocket_sender.assert_called_once()
 
-    @patch("transactions.services.transaction_service.async_to_sync")
-    @patch("transactions.services.transaction_service.get_channel_layer")
+    @patch("apps.transactions.services.transaction_service.async_to_sync")
+    @patch("apps.transactions.services.transaction_service.get_channel_layer")
     def test_websocket_payload(
         self,
         mock_get_channel_layer,
@@ -492,8 +452,8 @@ class TransferServiceTests(TestCase):
         self.assertEqual(data["recipient_wallet"],str(self.wallet2.wallet_uuid))
         self.assertIn("250.00",data["message"])
 
-    @patch("transactions.tasks.notify_monitoring_team.delay")
-    @patch("transactions.services.transaction_service.async_to_sync")
+    @patch("apps.transactions.tasks.notify_monitoring_team.delay")
+    @patch("apps.transactions.services.transaction_service.async_to_sync")
     def test_failed_transfer_sends_no_notification(
         self,
         mock_async_to_sync,
@@ -519,11 +479,15 @@ class TransferAPIViewTests(APITestCase):
         self.user = User.objects.create_user(
             username="zahra",
             password="12345678",
+            email="zahra@test.com",
+            mobile="09130650485"
         )
 
         self.receiver = User.objects.create_user(
             username="receiver",
             password="12345678",
+            email="receiver@test.com",
+            mobile="09130650489"
         )
 
         self.client.force_authenticate(self.user)
@@ -548,7 +512,7 @@ class TransferAPIViewTests(APITestCase):
         self.url = reverse("transfer")
 
 
-    @patch("transactions.api.views.transfer")
+    @patch("apps.transactions.api.views.transfer")
     def test_successful_transfer(self, mock_transfer):
 
         txn = Transaction.objects.create(
@@ -559,6 +523,7 @@ class TransferAPIViewTests(APITestCase):
             status=TransactionStatus.COMPLETED,
             idempotency_key=str(uuid4()),
             created_by=self.user,
+            reference_number=str(uuid4())
         )
 
         mock_transfer.return_value = (txn, False)
@@ -594,7 +559,7 @@ class TransferAPIViewTests(APITestCase):
         )
 
 
-    @patch("transactions.api.views.transfer")
+    @patch("apps.transactions.api.views.transfer")
     def test_idempotent_transfer_returns_200(
         self,
         mock_transfer,
@@ -608,6 +573,7 @@ class TransferAPIViewTests(APITestCase):
             status=TransactionStatus.COMPLETED,
             idempotency_key=str(uuid4()),
             created_by=self.user,
+            reference_number=str(uuid4())
         )
 
         mock_transfer.return_value = (

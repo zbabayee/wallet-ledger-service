@@ -110,9 +110,9 @@ class TransactionLedger(TimeStampedUUIDModel):
         ]
 
     def save(self, *args, **kwargs):
-        if self.pk:
+        if self.pk and not self._state.adding:
             raise RuntimeError("Ledger entries are immutable.")
-        super().save(*args, **kwargs)
+        return super().save(*args, **kwargs)
 
     def delete(self, *args, **kwargs):
         raise RuntimeError("Ledger entries are immutable.")

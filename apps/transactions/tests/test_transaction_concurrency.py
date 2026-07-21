@@ -10,7 +10,7 @@ from apps.transactions.models import (
 )
 from apps.transactions.services.transaction_service import transfer
 from apps.transactions.services.transaction_service import withdraw
-from apps.wallets.models import Wallet
+from apps.wallets.models import Wallet, Currency
 
 
 class TransactionConcurrencyTests(TransactionTestCase):
@@ -22,12 +22,19 @@ class TransactionConcurrencyTests(TransactionTestCase):
         self.user = User.objects.create_user(
             username="testuser",
             password="password123",
-        )
+            email="testuser@gmail.com",
+            mobile="09131111117",
 
+        )
+        self.currency = Currency.objects.create(
+            code="USD",
+            name="US Dollar",
+        )
         self.wallet = Wallet.objects.create(
             user=self.user,
             balance=Decimal("100"),
             status="ACTIVE",
+            currency=self.currency
         )
 
     def execute_withdraw(self):
@@ -75,21 +82,30 @@ class TransferConcurrencyTests(TransactionTestCase):
         self.user1 = User.objects.create_user(
             username="user1",
             password="test123",
+            email="user1@gmail.com",
+            mobile="09131111116",
         )
 
         self.user2 = User.objects.create_user(
             username="user2",
             password="test123",
+            email="user2@gmail.com",
+            mobile="09131111115",
+
+        )
+        self.currency = Currency.objects.create(
+            code="USD",
+            name="US Dollar",
         )
         self.wallet_a = Wallet.objects.create(
             user=self.user1,
             balance=Decimal("1000"),
-            currency_id=1,
+            currency=self.currency
         )
         self.wallet_b = Wallet.objects.create(
             user=self.user2,
             balance=Decimal("0"),
-            currency_id=1,
+            currency=self.currency
         )
 
     def _make_transfer(self, key):
