@@ -33,6 +33,8 @@ urlpatterns = [
 
     # Accounts APIs
     path("api/accounts/", include("apps.accounts.api.urls")),
+    path("api/wallets/", include("apps.wallets.api.urls")),
+    path("api/transactions/", include("apps.transactions.api.urls")),
 
     # Swagger Schema
     path("api/schema/", SpectacularAPIView.as_view(),name="schema"),
